@@ -2,12 +2,13 @@ import os
 import platform
 import pyaudio
 import wave
-import speech_recognition as sr
 from gtts import gTTS
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
-from flask import Flask, request, jsonify, render_template, send_file
+from flask import Flask, request, jsonify, render_template
 import webbrowser
 from threading import Timer
+import pyvts
+import asyncio
 
 # Initialize GPT model and tokenizer
 model_name = 'gpt2-xl'  # gpt2-xl 모델 선택
@@ -16,6 +17,42 @@ tokenizer = GPT2Tokenizer.from_pretrained(model_name)
 
 # Flask app initialization
 app = Flask(__name__)
+
+# VTube Studio API 연결 설정
+vts = pyvts.vts()
+
+async def connect_vts():
+    await vts.connect()
+
+    # API 인증 데이터
+    auth_data = {
+        "apiName": "VTubeStudioPublicAPI",
+        "apiVersion": "1.0",
+        "requestID": "SomeID",
+        "messageType": "AuthenticationTokenRequest",
+        "data": {
+            "pluginName": "My Cool Plugin",
+            "pluginDeveloper": "My Name",
+            "pluginIcon": "iVBORw0.........KGgoA="
+        }
+    }
+
+    # 인증 요청
+    response = await vts.request(auth_data)
+    
+    # API 키가 제공되면 저장
+    if 'data' in response and 'authenticationToken' in response['data']:
+        api_key = response['data']['authenticationToken']
+        print(f"Authenticated with API key: {api_key}")
+    else:
+        print("Failed to authenticate")
+    
+    # 예제: 캐릭터 상태 변경
+    # await vts.some_method_to_change_state()
+
+    print("Authenticated and connected to VTube Studio")
+
+asyncio.run(connect_vts())
 
 # Function to play a .wav file using PyAudio
 def play_wav_file(filename):
@@ -72,13 +109,23 @@ def chat():
     # Play the generated response (macOS)
     play_on_macos('response.wav')
 
+    # VTube Studio와 상호작용
+    asyncio.run(send_to_vts(response))
+
     # Return AI response in the JSON
     return jsonify({'response': response}), 200
+
+# VTube Studio로 텍스트를 전송하는 함수
+async def send_to_vts(text):
+    # 여기에 VTube Studio API와 상호작용하는 코드를 추가
+    # 예시: 텍스트를 캐릭터의 말풍선으로 표시
+    await vts.send_text(text)
+    print("Sent text to VTube Studio")
 
 # macOS에서 WAV 파일 재생 함수
 def play_on_macos(filename):
     system_name = platform.system()
-    if (system_name == 'Darwin'):  # macOS인 경우
+    if system_name == 'Darwin':  # macOS인 경우
         os.system(f'afplay {filename}')
     else:
         print("Unsupported OS for audio playback.")
