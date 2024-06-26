@@ -30,6 +30,13 @@
             text-align: center;
             font-size: 1.5em;
             color: #fff;
+            position: relative;
+        }
+        .chat-header::before {
+            content: '🐱';
+            position: absolute;
+            left: 10px;
+            font-size: 1.5em;
         }
         .chat-messages {
             flex-grow: 1;
@@ -58,6 +65,13 @@
             cursor: pointer;
             border-bottom-right-radius: 10px;
             font-family: 'Comic Neue', cursive;
+            position: relative;
+        }
+        .chat-input button::after {
+            content: '✨';
+            position: absolute;
+            right: 10px;
+            font-size: 1.2em;
         }
         .chat-input button:hover {
             background-color: #ff6666;
@@ -67,6 +81,17 @@
             padding: 10px;
             border-radius: 10px;
             font-family: 'Comic Neue', cursive;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
         .user-message {
             background-color: #ff9999;
@@ -111,6 +136,13 @@
             const chatMessages = document.getElementById("chatMessages");
             chatMessages.appendChild(messageContainer);
             chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            playSound();
+        }
+
+        function playSound() {
+            const audio = new Audio('https://www.myinstants.com/media/sounds/pop-cork.mp3');
+            audio.play();
         }
 
         document.addEventListener("DOMContentLoaded", () => {
