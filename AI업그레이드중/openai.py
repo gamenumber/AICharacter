@@ -4,16 +4,13 @@ import pyaudio
 import wave
 import speech_recognition as sr
 from gtts import gTTS
-from transformers import GPT2LMHeadModel, GPT2Tokenizer
+import openai
 from flask import Flask, request, jsonify, render_template, send_file
 import webbrowser
 from threading import Timer
 
-# 따로 openai api 끌어 당겨서 쓰셔도 됩니다.
-# Initialize GPT model and tokenizer
-model_name = 'gpt2-large'  # gpt2-large 모델 선택
-model = GPT2LMHeadModel.from_pretrained(model_name)
-tokenizer = GPT2Tokenizer.from_pretrained(model_name)
+# OpenAI API 키 설정 -> 환경변수로 등록하시고 사용하시는게 보안상 좋기 때문에 이렇게 해주세요 하드코딩은 좋지 않습니다.
+openai.api_key = 'YOUR_OPENAI_API_KEY'
 
 # Flask app initialization
 app = Flask(__name__)
@@ -42,12 +39,14 @@ def make_tts(content):
     tts = gTTS(text=content, lang='en')
     tts.save('response.wav')
 
-# Function to generate response using GPT model
+# Function to generate response using OpenAI GPT model
 def generate_gpt_response(text):
-    input_ids = tokenizer.encode(text, return_tensors='pt')
-    output_ids = model.generate(input_ids, max_length=50, num_return_sequences=1)
-    response_text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-    return response_text
+    response = openai.Completion.create(
+        engine="davinci-codex",  # 또는 'text-davinci-003'
+        prompt=text,
+        max_tokens=50
+    )
+    return response.choices[0].text.strip()
 
 # Route to serve the index.html page
 @app.route('/')
