@@ -9,9 +9,8 @@ from flask import Flask, request, jsonify, render_template, send_file
 import webbrowser
 from threading import Timer
 
-# 따로 openai api 끌어 당겨서 쓰셔도 됩니다.
 # Initialize GPT model and tokenizer
-model_name = 'gpt2-large'  # gpt2-large 모델 선택
+model_name = 'gpt2-xl'  # gpt2-xl 모델 선택
 model = GPT2LMHeadModel.from_pretrained(model_name)
 tokenizer = GPT2Tokenizer.from_pretrained(model_name)
 

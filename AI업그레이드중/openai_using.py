@@ -4,13 +4,13 @@ import pyaudio
 import wave
 import speech_recognition as sr
 from gtts import gTTS
-import openai
+import openai_using
 from flask import Flask, request, jsonify, render_template, send_file
 import webbrowser
 from threading import Timer
 
 # OpenAI API 키 설정 -> 환경변수로 등록하시고 사용하시는게 보안상 좋기 때문에 이렇게 해주세요 하드코딩은 좋지 않습니다.
-openai.api_key = 'YOUR_OPENAI_API_KEY'
+openai_using.api_key = 'YOUR_OPENAI_API_KEY'
 
 # Flask app initialization
 app = Flask(__name__)
@@ -41,7 +41,7 @@ def make_tts(content):
 
 # Function to generate response using OpenAI GPT model
 def generate_gpt_response(text):
-    response = openai.Completion.create(
+    response = openai_using.Completion.create(
         engine="davinci-codex",  # 또는 'text-davinci-003'
         prompt=text,
         max_tokens=50
