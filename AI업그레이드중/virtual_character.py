@@ -9,9 +9,10 @@ import webbrowser
 from threading import Timer
 import pyvts
 import asyncio
+import threading
 
 # Initialize GPT model and tokenizer
-model_name = 'gpt2-xl'  # gpt2-xl 모델 선택
+model_name = 'gpt2-xl'
 model = GPT2LMHeadModel.from_pretrained(model_name)
 tokenizer = GPT2Tokenizer.from_pretrained(model_name)
 
@@ -22,39 +23,43 @@ app = Flask(__name__)
 vts = pyvts.vts()
 
 async def connect_vts():
-    await vts.connect()
+    while True:
+        try:
+            await vts.connect()
+            auth_data = {
+                "apiName": "VTubeStudioPublicAPI",
+                "apiVersion": "1.0",
+                "requestID": "SomeID",
+                "messageType": "AuthenticationTokenRequest",
+                "data": {
+                    "pluginName": "My Cool Plugin",
+                    "pluginDeveloper": "My Name",
+                    "pluginIcon": "iVBORw0.........KGgoA="
+                }
+            }
 
-    # API 인증 데이터
-    auth_data = {
-        "apiName": "VTubeStudioPublicAPI",
-        "apiVersion": "1.0",
-        "requestID": "SomeID",
-        "messageType": "AuthenticationTokenRequest",
-        "data": {
-            "pluginName": "My Cool Plugin",
-            "pluginDeveloper": "My Name",
-            "pluginIcon": "iVBORw0.........KGgoA="
-        }
-    }
+            response = await vts.request(auth_data)
+            
+            if 'data' in response and 'authenticationToken' in response['data']:
+                api_key = response['data']['authenticationToken']
+                print(f"Authenticated with API key: {api_key}")
+            else:
+                print("Failed to authenticate")
+            
+            print("Authenticated and connected to VTube Studio")
+            break  # 연결 성공 시 루프 종료
+        except Exception as e:
+            print(f"Connection failed: {e}")
+            await asyncio.sleep(5)  # 5초 후에 다시 시도
 
-    # 인증 요청
-    response = await vts.request(auth_data)
-    
-    # API 키가 제공되면 저장
-    if 'data' in response and 'authenticationToken' in response['data']:
-        api_key = response['data']['authenticationToken']
-        print(f"Authenticated with API key: {api_key}")
-    else:
-        print("Failed to authenticate")
-    
-    # 예제: 캐릭터 상태 변경
-    # await vts.some_method_to_change_state()
+# 별도의 스레드에서 asyncio 이벤트 루프 실행
+def start_async_loop(loop):
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(connect_vts())
 
-    print("Authenticated and connected to VTube Studio")
+new_loop = asyncio.new_event_loop()
+threading.Thread(target=start_async_loop, args=(new_loop,)).start()
 
-asyncio.run(connect_vts())
-
-# Function to play a .wav file using PyAudio
 def play_wav_file(filename):
     wav_file = wave.open(filename, 'rb')
     p = pyaudio.PyAudio()
@@ -73,24 +78,20 @@ def play_wav_file(filename):
     stream.close()
     p.terminate()
 
-# Function to convert text to speech using gTTS and save the result
 def make_tts(content):
     tts = gTTS(text=content, lang='en')
     tts.save('response.wav')
 
-# Function to generate response using GPT model
 def generate_gpt_response(text):
     input_ids = tokenizer.encode(text, return_tensors='pt')
     output_ids = model.generate(input_ids, max_length=50, num_return_sequences=1)
     response_text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
     return response_text
 
-# Route to serve the index.html page
 @app.route('/')
 def index():
     return render_template('index.html')
 
-# Route to handle chat functionality
 @app.route('/chat', methods=['POST'])
 def chat():
     input_text = request.json.get('text')
@@ -99,33 +100,35 @@ def chat():
 
     print("User input: ", input_text)
 
-    # Generate response using GPT model
     response = generate_gpt_response(input_text)
     print("Response from GPT model: ", response)
 
-    # Convert response text to speech
     make_tts(response)
 
-    # Play the generated response (macOS)
     play_on_macos('response.wav')
 
-    # VTube Studio와 상호작용
-    asyncio.run(send_to_vts(response))
+    # 새로운 이벤트 루프에서 실행하도록 수정
+    asyncio.run_coroutine_threadsafe(send_to_vts(response), new_loop)
 
-    # Return AI response in the JSON
     return jsonify({'response': response}), 200
 
-# VTube Studio로 텍스트를 전송하는 함수
 async def send_to_vts(text):
-    # 여기에 VTube Studio API와 상호작용하는 코드를 추가
-    # 예시: 텍스트를 캐릭터의 말풍선으로 표시
-    await vts.send_text(text)
-    print("Sent text to VTube Studio")
+    message_payload = {
+        "apiName": "VTubeStudioPublicAPI",
+        "apiVersion": "1.0",
+        "requestID": "SendMessageRequest",
+        "messageType": "SendMessage",
+        "data": {
+            "message": text
+        }
+    }
 
-# macOS에서 WAV 파일 재생 함수
+    response = await vts.request(message_payload)
+    print("Sent text to VTube Studio:", response)
+
 def play_on_macos(filename):
     system_name = platform.system()
-    if system_name == 'Darwin':  # macOS인 경우
+    if system_name == 'Darwin':
         os.system(f'afplay {filename}')
     else:
         print("Unsupported OS for audio playback.")
@@ -133,7 +136,6 @@ def play_on_macos(filename):
 def open_browser():
     webbrowser.open_new('http://127.0.0.1:5000/')
 
-# Flask 애플리케이션 실행 부분
 if __name__ == '__main__':
     Timer(1, open_browser).start()
     app.run(port=5000)
