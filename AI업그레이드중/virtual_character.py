@@ -17,6 +17,7 @@ app = Flask(__name__)
 # VTube Studio API 연결 설정
 vts = pyvts.vts()
 
+# 비동기 VTube Studio 연결 함수
 async def connect_vts():
     while True:
         try:
@@ -65,31 +66,34 @@ def get_model_and_tokenizer():
 def generate_gpt_response(text):
     model, tokenizer = get_model_and_tokenizer()
     input_ids = tokenizer.encode(text, return_tensors='pt')
-    output_ids = model.generate(input_ids, max_length=50, num_return_sequences=1)
+    attention_mask = [1] * len(input_ids[0])  # attention_mask 설정
+    output_ids = model.generate(input_ids, max_length=50, num_return_sequences=1, pad_token_id=tokenizer.eos_token_id, attention_mask=attention_mask)
     response_text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
     return response_text
 
 def make_tts(content):
-    tts = gTTS(text=content, lang='en')
+    tts = gTTS(text=content, lang='ko')  # 한국어 설정
     tts.save('response.wav')
 
-def play_wav_file(filename):
-    wav_file = wave.open(filename, 'rb')
-    p = pyaudio.PyAudio()
+async def play_wav_file(file_path):
+    try:
+        wf = await asyncio.to_thread(wave.open, file_path, 'rb')
+        p = pyaudio.PyAudio()
 
-    stream = p.open(format=p.get_format_from_width(wav_file.getsampwidth()),
-                    channels=wav_file.getnchannels(),
-                    rate=wav_file.getframerate(),
-                    output=True)
+        stream = await asyncio.to_thread(p.open, format=p.get_format_from_width(wf.getsampwidth()),
+                                        channels=wf.getnchannels(),
+                                        rate=wf.getframerate(),
+                                        output=True)
+        data = await asyncio.to_thread(wf.readframes, 1024)
+        while data:
+            await asyncio.to_thread(stream.write, data)
+            data = await asyncio.to_thread(wf.readframes, 1024)
 
-    data = wav_file.readframes(1024)
-    while data:
-        stream.write(data)
-        data = wav_file.readframes(1024)
-
-    stream.stop_stream()
-    stream.close()
-    p.terminate()
+        await asyncio.to_thread(stream.stop_stream)
+        await asyncio.to_thread(stream.close)
+        await asyncio.to_thread(p.terminate)
+    except wave.Error as e:
+        print(f"Error playing WAV file: {e}")
 
 async def send_to_vts(text):
     message_payload = {
@@ -101,16 +105,15 @@ async def send_to_vts(text):
             "message": text
         }
     }
-
     response = await vts.request(message_payload)
     print("Sent text to VTube Studio:", response)
 
-def chat_handler(input_text):
+async def chat_handler(input_text):
     response = generate_gpt_response(input_text)
     print("Response from GPT model: ", response)
     make_tts(response)
-    play_wav_file('response.wav')
-    asyncio.run_coroutine_threadsafe(send_to_vts(response), new_loop)
+    await play_wav_file('response.wav')
+    await send_to_vts(response)
 
 @app.route('/')
 def index():
@@ -124,9 +127,8 @@ def chat():
 
     print("User input: ", input_text)
 
-    # 새로운 스레드에서 채팅 처리 실행
-    t = threading.Thread(target=chat_handler, args=(input_text,))
-    t.start()
+    # 새로운 스레드에서 비동기 작업 실행
+    asyncio.run_coroutine_threadsafe(chat_handler(input_text), new_loop)
 
     return jsonify({'response': 'Processing...'}), 200
 
@@ -138,7 +140,7 @@ def play_on_macos(filename):
         print("Unsupported OS for audio playback.")
 
 def open_browser():
-    webbrowser.open_new('http://127.0.0.1:5000/')
+    webbrowser.open('http://127.0.0.1:5000/')
 
 if __name__ == '__main__':
     model_name = 'gpt2-xl'
